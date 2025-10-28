@@ -11,20 +11,22 @@ FPS = 60
 # 色の定義
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-PLAYER_COLOR = (50, 50, 255)  # プレイヤー (青)
+PLAYER_COLOR = (50, 50, 255) # プレイヤー (青)
 PLATFORM_COLOR = (100, 100, 100) # 足場 (灰色)
 SPIKE_COLOR = (255, 50, 50)  # 障害物 (赤)
 KEY_COLOR = (255, 215, 0) # カギ (黄)
-DOOR_COLOR = (0, 200, 0)     # トビラ (緑)
+DOOR_COLOR = (0, 200, 0) # トビラ (緑)
 
 # 物理定数
 GRAVITY = 0.8
 JUMP_STRENGTH = -15
-WALL_KICK_HORIZONTAL = 10 # 壁キック時の水平方向の力
-WALL_KICK_VERTICAL = -12  # 壁キック時の垂直方向の力
 PLAYER_SPEED = 5
+# 壁キック用の定数
+WALL_JUMP_STRENGTH_Y = -14 # 壁キックの縦方向の強さ
+WALL_JUMP_STRENGTH_X = 10 # 壁キックの横方向の強さ（移動速度より大きくする）
+WALL_SLIDE_SPEED = 2 # 壁ずり落ちる速度
 
-# --- プレイヤークラス (壁キック機能付き) ---
+# --- プレイヤークラス (壁キック対応、クールダウン付き) ---
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
@@ -35,51 +37,74 @@ class Player(pygame.sprite.Sprite):
         self.vel_x = 0
         self.vel_y = 0
         self.on_ground = False
-        self.on_wall_left = False # 左の壁に接触しているか
-        self.on_wall_right = False # 右の壁に接触しているか
         self.has_key = False
+        
+        # 壁キック用のフラグ
+        self.on_wall = 0 
+        
+        # ★壁キック用クールダウン追加★
+        self.wall_jump_cooldown = 0
+        self.WALL_JUMP_COOLDOWN_FRAMES = 10 # 10フレーム (約0.16秒) 入力を無視
 
-    def update(self, platforms):
-        # 左右の入力
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            self.vel_x = -PLAYER_SPEED
-        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            self.vel_x = PLAYER_SPEED
-        else:
-            self.vel_x = 0
+    def check_side_collision(self, platforms):
+        """
+        X軸の衝突判定を行い、壁接触フラグ (self.on_wall) を設定する
+        """
+        # 左右に移動
+        self.rect.x += self.vel_x
+        
+        hit_list = pygame.sprite.spritecollide(self, platforms, False)
+        self.on_wall = 0 # 初期化
+        
+        for platform in hit_list:
+            # 衝突した場合は、位置を壁の外側に強制的に戻す
+            if self.vel_x > 0: # 右に移動中に衝突 (右壁に接触)
+                self.rect.right = platform.rect.left
+                self.on_wall = 1 # 右壁に接触
+            elif self.vel_x < 0: # 左に移動中に衝突 (左壁に接触)
+                self.rect.left = platform.rect.right
+                self.on_wall = -1 # 左壁に接触
 
-        # 重力と最大落下速度
+    def apply_gravity(self):
+        """重力を適用し、最大落下速度を制限する"""
         self.vel_y += GRAVITY
         if self.vel_y > 10:
             self.vel_y = 10
-
-        # X軸（横）の移動と壁との衝突判定
-        self.rect.x += self.vel_x
-        hit_list_x = pygame.sprite.spritecollide(self, platforms, False)
-        self.on_wall_left = False
-        self.on_wall_right = False
+    
+    
+    def update(self, platforms):
         
-        for platform in hit_list_x:
-            if self.vel_x > 0: # 右に移動中に衝突（右の壁）
-                self.rect.right = platform.rect.left
-                self.on_wall_right = True
-            elif self.vel_x < 0: # 左に移動中に衝突（左の壁）
-                self.rect.left = platform.rect.right
-                self.on_wall_left = True
-            self.vel_x = 0 # 衝突した場合は水平速度をリセット
-            
-        # 画面外に出ないように
-        if self.rect.left < 0:
-            self.rect.left = 0
-        if self.rect.right > SCREEN_WIDTH:
-            self.rect.right = SCREEN_WIDTH
+        # ★クールダウンを処理★
+        if self.wall_jump_cooldown > 0:
+            self.wall_jump_cooldown -= 1
+        
+        keys = pygame.key.get_pressed()
 
-        # Y軸（縦）の移動と衝突判定
+        # 1. 左右の入力
+        # クールダウン中の場合は、入力による横速度変更をスキップ
+        if self.wall_jump_cooldown == 0:
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                self.vel_x = -PLAYER_SPEED
+            elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                self.vel_x = PLAYER_SPEED
+            else:
+                self.vel_x = 0
+
+        # 2. X軸（横）の移動と衝突判定
+        self.check_side_collision(platforms)
+
+        # 3. 重力と壁ずり落ち
+        if not self.on_ground and self.on_wall != 0 and self.vel_y > 0:
+            # 壁に張り付いている時、落下速度を遅くする (壁ずり落ち)
+            self.vel_y = min(self.vel_y, WALL_SLIDE_SPEED)
+        else:
+            self.apply_gravity()
+
+        # 4. Y軸（縦）の移動と衝突判定（足場）
         self.rect.y += self.vel_y
+        hit_list = pygame.sprite.spritecollide(self, platforms, False)
         
-        hit_list_y = pygame.sprite.spritecollide(self, platforms, False)
-        for platform in hit_list_y:
+        for platform in hit_list:
             if self.vel_y > 0: # 下に落ちている時 (着地)
                 self.rect.bottom = platform.rect.top
                 self.vel_y = 0
@@ -87,55 +112,45 @@ class Player(pygame.sprite.Sprite):
                 self.rect.top = platform.rect.bottom
                 self.vel_y = 0
 
-        # on_ground 判定
+        # 5. on_ground 判定
         self.rect.y += 1
         ground_hit_list = pygame.sprite.spritecollide(self, platforms, False)
         self.rect.y -= 1
+        self.on_ground = len(ground_hit_list) > 0
 
-        if len(ground_hit_list) > 0:
-            self.on_ground = True
-            self.on_wall_left = False
-            self.on_wall_right = False
-        else:
-            self.on_ground = False
-
-        # 壁に接している間は落下速度を緩める
-        # 地面にいない & どちらかの壁に接している
-        if not self.on_ground and (self.on_wall_left or self.on_wall_right):
-            if self.vel_y > 3: # 緩やかに落ちる
-                self.vel_y = 3
-
+        # 6. 画面外に出ないように
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > SCREEN_WIDTH:
+            self.rect.right = SCREEN_WIDTH
 
     def jump(self):
-        # 1. 地上でのジャンプ
+        """通常ジャンプと壁キックを処理する"""
         if self.on_ground:
+            # 地上にいる時: 通常ジャンプ
             self.vel_y = JUMP_STRENGTH
-            return
-        
-        # 2. 壁キック (回数制限なし)
-        if self.on_wall_left:
-            self.vel_y = WALL_KICK_VERTICAL
-            self.vel_x = WALL_KICK_HORIZONTAL
-            self.rect.x += 1 # 壁から離れるために1ピクセル移動
-            self.on_wall_left = False
-            return
+        elif self.on_wall != 0:
+            # 空中かつ壁に接触している時: 壁キック
             
-        if self.on_wall_right:
-            self.vel_y = WALL_KICK_VERTICAL
-            self.vel_x = -WALL_KICK_HORIZONTAL
-            self.rect.x -= 1 # 壁から離れるために1ピクセル移動
-            self.on_wall_right = False
-            return
-        
+            # 縦方向の速度 (上方向へ)
+            self.vel_y = WALL_JUMP_STRENGTH_Y 
+            
+            # 横方向の速度 (壁キックは壁から離れる方向に強く)
+            self.vel_x = -self.on_wall * WALL_JUMP_STRENGTH_X
+            
+            # ★クールダウンをセット★
+            self.wall_jump_cooldown = self.WALL_JUMP_COOLDOWN_FRAMES
+            
+            # 壁キック後は壁から離れるため、on_wall をリセット
+            self.on_wall = 0
+            
     def reset_position(self, x, y):
         """プレイヤーを初期位置に戻す"""
         self.rect.topleft = (x, y)
         self.vel_y = 0
-        self.vel_x = 0
         self.on_ground = False
-        self.on_wall_left = False
-        self.on_wall_right = False
         self.has_key = False
+        self.wall_jump_cooldown = 0 # クールダウンもリセット
 
 # --- その他のオブジェクトクラス ---
 class Platform(pygame.sprite.Sprite):
@@ -174,7 +189,7 @@ class Door(pygame.sprite.Sprite):
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("Minimalism Prototype - Wall Kick")
+    pygame.display.set_caption("Minimalism Prototype (Wall Kick)")
     clock = pygame.time.Clock()
 
     # --- レベルのセットアップ ---
@@ -185,35 +200,37 @@ def main():
     start_pos = (50, 450)
     player = Player(*start_pos)
 
-    # 壁キックを試せるようにレベルを変更
+    # 足場を作成
     floor = Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40)
-    wall_left = Platform(0, 100, 40, 460)
-    wall_right = Platform(SCREEN_WIDTH - 40, 100, 40, 460)
     p1 = Platform(200, 450, 100, 20)
-    p2 = Platform(350, 250, 150, 20)
-    door_platform = Platform(SCREEN_WIDTH - 150, 100, 150, 20) # ドアのための足場
-
-    platforms.add(floor, wall_left, wall_right, p1, p2, door_platform)
+    p2 = Platform(400, 350, 150, 20)
     
-    spike1 = Spike(250, 430, 20, 20)
+    # 壁キックを試しやすいように、左と右に大きな壁を追加
+    left_wall = Platform(0, 0, 40, SCREEN_HEIGHT - 40) # 床以外は壁
+    right_wall = Platform(SCREEN_WIDTH - 40, 0, 40, SCREEN_HEIGHT - 40)
+    
+    platforms.add(floor, p1, p2, left_wall, right_wall) # 壁を追加
+    
+    # 障害物を作成
+    spike1 = Spike(250, 430, 20, 20) # p1の上
     spikes.add(spike1)
     
-    key = Key(420, 220)
-    door = Door(SCREEN_WIDTH - 120, 40) # ドアを足場の上に配置
+    # アイテムとゴールを作成
+    key = Key(450, 320) # p2の上
+    door = Door(SCREEN_WIDTH - 80, SCREEN_HEIGHT - 100) # 床の右端
 
     all_sprites.add(player, platforms, spikes, key, door)
-    keys_group = pygame.sprite.Group(key)
     # --- レベルセットアップここまで ---
 
-    running = True
-    while running:
+    while True:
         # --- イベント処理 ---
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                pygame.quit()
+                sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE or event.key == pygame.K_UP or event.key == pygame.K_w:
-                    player.jump()
+                    player.jump() # on_ground または on_wall のときに実行される
 
         # --- 更新処理 ---
         player.update(platforms)
@@ -222,38 +239,35 @@ def main():
         if pygame.sprite.spritecollide(player, spikes, False):
             print("ミス！リスタートします。")
             player.reset_position(*start_pos)
-            # カギのリセット
-            if not key.alive():
-                key = Key(420, 220)
+            # カギもリセット (もし取得済みだったら)
+            if not key in all_sprites:
+                # 既存のKeyオブジェクトを再利用してリセット
+                key = Key(450, 320)
                 all_sprites.add(key)
-                keys_group.add(key)
-            else:
-                player.has_key = False
 
 
         # カギとの衝突判定
-        key_hit_list = pygame.sprite.spritecollide(player, keys_group, True)
-        if key_hit_list:
+        # keyがall_spritesに含まれているかチェックしてから衝突判定
+        if key in all_sprites and pygame.sprite.collide_rect(player, key):
             player.has_key = True
+            key.kill() # カギを消す
             print("カギを手に入れた！")
 
         # トビラとの衝突判定
         if pygame.sprite.collide_rect(player, door):
             if player.has_key:
                 print("クリア！おめでとう！")
-                running = False
-            # else:
-            #     pass
+                pygame.quit()
+                sys.exit()
+            else:
+                pass
 
         # --- 描画処理 ---
-        screen.fill(BLACK)
-        all_sprites.draw(screen)
+        screen.fill(BLACK) # 画面を黒で塗りつぶす
+        all_sprites.draw(screen) # 全てのスプライトを描画
         
         pygame.display.flip()
         clock.tick(FPS)
-
-    pygame.quit()
-    sys.exit()
 
 if __name__ == "__main__":
     main()
