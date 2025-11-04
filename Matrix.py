@@ -13,19 +13,22 @@ else:
 # --- 定数設定 ---
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
+
+# ゲームの「見える範囲」 (カメラのズーム設定)
 GAME_WIDTH = 640
 GAME_HEIGHT = 480
+
 FPS = 60
 TILE_SIZE = 40 # 1マスのサイズ
 
 # 色の定義
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-PLAYER_COLOR = (50, 50, 255)    # プレイヤー (青)
+PLAYER_COLOR = (50, 50, 255)      # プレイヤー (青)
 PLATFORM_COLOR = (100, 100, 100) # 足場 (灰色)
-SPIKE_COLOR = (255, 50, 50)      # 障害物 (赤)
+SPIKE_COLOR = (255, 50, 50)       # 障害物 (赤)
 KEY_COLOR = (255, 215, 0)   # カギ (黄)
-DOOR_COLOR = (0, 200, 0)   # トビラ (緑)
+DOOR_COLOR = (0, 200, 0)    # トビラ (緑)
 PLAYER_BORDER_COLOR = (255, 255, 255) # プレイヤーの枠の色 (白)
 PLATFORM_BORDER_COLOR = (255, 255, 255) # 足場の枠の色 (白)
 BOOSTER_COLOR = (50, 255, 50) # ブースターの色 (明るい緑)
@@ -35,26 +38,22 @@ LAUNCHER_COLOR = (150, 50, 50) # 発射台 (茶色/赤茶色)
 JUMPPAD_COLOR = (200, 0, 255) # ★ジャンプ台 (紫) を追加
 
 # 物理定数
-GRAVITY = 0.8
-JUMP_STRENGTH = -15
+GRAVITY = 0.4
+JUMP_STRENGTH = -12
 PLAYER_SPEED = 5
 # 壁キック用の定数
-WALL_JUMP_STRENGTH_Y = -19 # 壁キックの縦方向の強さ
-WALL_JUMP_STRENGTH_X = 5 # 壁キックの横方向の強さ（移動速度より大きくする）
-WALL_SLIDE_SPEED = 2 # 壁ずり落ちる速度
+WALL_JUMP_STRENGTH_Y = -15 # 壁キックの縦方向の強さ
+WALL_JUMP_STRENGTH_X = 7 # 壁キックの横方向の強さ（移動速度より大きくする）
+WALL_SLIDE_SPEED = 1 # 壁ずり落ちる速度
 
 # 弓矢の発射間隔 (ミリ秒)のランダム範囲を設定
 MIN_ARROW_INTERVAL = 500  # 最小間隔 (0.5秒)
 MAX_ARROW_INTERVAL = 1500 # 最大間隔 (1.5秒)
 
-# WALL_KICK_HORIZONTAL = 10 # 壁キック時の水平方向の力
-# WALL_KICK_VERTICAL = -12  # 壁キック時の垂直方向の力
-# PLAYER_SPEED = 5
-
 MOVE_SPEED = 5
 MAX_SPEED = 6
 ACCELERATION = 0.4
-FRICTION_FORCE = 0.2
+FRICTION_FORCE = 0.1 # ★滑りを増やすため 0.1 に変更
 
 # ヘルパー関数
 def get_angle_from_gravity(direction):
@@ -62,47 +61,59 @@ def get_angle_from_gravity(direction):
         return 180
     return 0
 
+# (コメントアウトされた重複定義は省略)
 
-# --- ステージの設計図 (Booster 'B' を追加) ---
+# 物理定数 (慣性・摩擦あり)
+GRAVITY = 0.4            # 重力
+JUMP_STRENGTH = -10      # ジャンプ力
+MAX_SPEED = 6            # プレイヤーの最高速度
+ACCELERATION = 0.4       # 加速の度合い
+FRICTION_FORCE = 0.1     # 摩擦力 (★滑りを増やすため 0.1)
+
+# --- ステージの設計図 (分かりやすい一本道・全ギミック) ---
 LEVEL_MAP = [
-    "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP", # Y=0
-    "P......................................P",
-    "P....@...PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP", # Y=2 (スタート)
-    "P.G..P.................................P", # Y=3 に 'B' を追加
-    "PPPPPP...PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP", # Y=4
-    "P........P.............................P",
-    "P..SSSS..P...PPPPPPPPPPPPPPPPPPPPPPPPPPP",
-    "P..PPPPP.P...P.........................P",
-    "P........P...P...S.S...................P",
-    "PPPPPPPPBP...P..PPPPP...PPPPPPPPPPPPPPPP",
-    "P............P..........P..............P",
-    "P....K.......P..........P..............P", # Y=11 (カギ)
-    "PPPPPPPPPPPPPP..........P...PPPPPPPPPPPP",
-    "P...............G.......P...P..........P",
-    "P.......................P...P..........P",
-    "P.......................P...P...SSSS...P",
-    "P.......................P...P...PPPP...P",
-    "P....PPPPPPPPPPPPPPPPPPPP...P..........P",
-    "P....P......................P..........P",
-    "P....P...PPPPPPPPPPPPPPPPPPPP..........P",
-    "P....P...P.............................P",
-    "P....P...P...PPPPPPPPPPPPPPPPPPPPPPPPPPP",
-    "P....P...P...P...................D.....P", # Y=21 (ゴール)
-    "P....P...P...P..................PPP....P",
-    "P....PPPPPPPPP.........................P",
-    "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP", # Y=24
+    "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP", # 0
+    "P                                            P", # 1
+    "P   K     FFFFF                              P", # 2 (K:カギ, F:落ちるトゲ)
+    "P   P     PPPPP                              P", # 3
+    "P   P                                        P", # 4
+    "P   P                                SSS     P", # 5 (S:トゲ)
+    "P   PPPPPPPPP      MMMMMMMMM     PPPPPPP     P", # 6 (M:動くトゲ)
+    "P           P      PPPPPPPPP     P           P", # 7
+    "P           P                    P           P", # 8
+    "P    G      P          SSSSS     P    D      P", # 9 (G:重力, S:トゲ, D:ドア)
+    "P   PPPPP   P          PPPPP     P   PPP     P", # 10
+    "P           P                    P           P", # 11
+    "P           P                    P           P", # 12
+    "P           P                    P   A       P", # 13 (A:弓矢ランチャー(右向き))
+    "P   PPPPPPPPP                    P           P", # 14
+    "P   P                            P           P", # 15
+    "P   P                            PPPPPPPPP   P", # 16
+    "P   P                                    PPPPP", # 17
+    "A                                 PPPPP      P", # 18
+    "PBBBPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP   PP     P", # 19
+    "P                                            P", # 20 
+    "P                                            P", # 21
+    "P@       F     F      FF    F       FFF      P", # 22 (スタート)
+    "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP",# 23
 ]
 
-# --- プレイヤークラス (壁キック機能付き) ---
+
+# --- プレイヤークラス (慣性・角丸・可変ジャンプ対応) ---
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
         self.image = pygame.Surface((30, 30), pygame.SRCALPHA)
-        self.image.fill((0, 0, 0, 0))
+        self.image.fill((0, 0, 0, 0)) # 完全に透過
+        # 白い枠線で、角の丸い四角を描画
         pygame.draw.rect(self.image, PLAYER_BORDER_COLOR, self.image.get_rect(), 
                          width=1, border_radius=4)
         
         self.rect = self.image.get_rect(topleft=(x, y))
+        
+        # ★ 修正: float型の正確な位置を保持
+        self.true_x = float(self.rect.x)
+        self.true_y = float(self.rect.y)
         
         self.vel_x = 0
         self.vel_y = 0
@@ -133,52 +144,52 @@ class Player(pygame.sprite.Sprite):
             self.wall_jump_cooldown -= 1
 
         # --- 2. 左右の入力 (加速・摩擦ベース) ---
+        # (★ 慣性バグ修正のため、ブロック1を削除し、ブロック2のみ残す)
         target_vel_x = 0
         
-        # 壁キックのクールダウン中でない場合のみ、左右の入力を受け付ける
         if self.wall_jump_cooldown == 0:
             if keys[pygame.K_LEFT] or keys[pygame.K_a]:
                 target_vel_x = -MOVE_SPEED * self.speed_multiplier
             elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
                 target_vel_x = MOVE_SPEED * self.speed_multiplier
         
-        # 加速/摩擦の計算
         if target_vel_x != 0: # 加速
             self.vel_x += (target_vel_x - self.vel_x) * ACCELERATION
         else: # 摩擦
             self.vel_x *= (1.0 - FRICTION_FORCE)
+
+        # C. 最高速度制限
+        if self.vel_x > MAX_SPEED:
+            self.vel_x = MAX_SPEED
+        elif self.vel_x < -MAX_SPEED:
+            self.vel_x = -MAX_SPEED
         
-        # 速度制限と停止
         if abs(self.vel_x) < 0.1: self.vel_x = 0
         self.vel_x = max(-MAX_SPEED * self.speed_multiplier, min(self.vel_x, MAX_SPEED * self.speed_multiplier))
         
+        #Y軸の物理演算 (重力) --- (★ここは元のコードから移動・変更なし)
+        if not self.on_ground:
+            # (注: このセクションは 3. Y軸の重力と壁ずり落ち に統合されています)
+            pass 
+
         # --- 3. Y軸の重力と壁ずり落ち ---
         if not self.on_ground:
-            
-            # ★--- 修正点 (ここから) ---★
-            
-            # 壁ずり落ち (重力が下向きの時)
             if self.on_wall != 0 and self.vel_y > 0 and current_gravity == "DOWN":
                  self.vel_y = min(self.vel_y + GRAVITY, WALL_SLIDE_SPEED)
-            
-            # 壁ずり落ち (重力が上向きの時)
             elif self.on_wall != 0 and self.vel_y < 0 and current_gravity == "UP":
-                 # "落下"(上昇)速度を遅くする
                  self.vel_y = max(self.vel_y - GRAVITY, -WALL_SLIDE_SPEED)
-            
-            # ★--- 修正点 (ここまで) ---★
-
-            # 通常の重力 (壁ずり落ち中でない場合)
             else:
                 if current_gravity == "DOWN":
                     self.vel_y += GRAVITY
                 elif current_gravity == "UP":
                     self.vel_y -= GRAVITY
-                # 最大落下/上昇速度
-                self.vel_y = max(-10, min(self.vel_y, 10)) 
+                self.vel_y = max(-1000, min(self.vel_y, 10)) # ★最大落下速度はY軸移動ステップで制御
 
         # --- 4. X軸（横）の移動と衝突判定 ---
-        self.rect.x += self.vel_x
+        # ★ 修正: true_x を使って計算
+        self.true_x += self.vel_x
+        self.rect.x = int(self.true_x)
+        
         hit_list_x = pygame.sprite.spritecollide(self, platforms, False)
         
         # 壁接触フラグをリセット
@@ -189,35 +200,62 @@ class Player(pygame.sprite.Sprite):
         for platform in hit_list_x:
             if self.vel_x > 0: # 右に移動中
                 self.rect.right = platform.rect.left
+                # ★ 修正: 壁フラグを立てる (復活)
                 self.on_wall_right = True
                 self.on_wall = 1 # 右壁
             elif self.vel_x < 0: # 左に移動中
                 self.rect.left = platform.rect.right
+                # ★ 修正: 壁フラグを立てる (復活)
                 self.on_wall_left = True
                 self.on_wall = -1 # 左壁
+            
+            # ★ 修正: true_x も補正
+            self.true_x = float(self.rect.x) 
             self.vel_x = 0 # 壁にぶつかったら横速度リセット
         
-        # --- 5. Y軸（縦）の移動と衝突判定 ---
-        self.rect.y += self.vel_y
-        hit_list_y = pygame.sprite.spritecollide(self, platforms, False)
+        # --- 5. Y軸（縦）の移動と衝突判定 (★貫通対策ロジックに差し替え) ---
         
-        for platform in hit_list_y:
-            if current_gravity == "DOWN":
-                if self.vel_y > 0: # 下に落ちている時 (着地)
-                    self.rect.bottom = platform.rect.top
-                    self.vel_y = 0
-                elif self.vel_y < 0: # 頭をぶつけた時
-                    self.rect.top = platform.rect.bottom
-                    self.vel_y = 0 
-            
-            elif current_gravity == "UP":
-                if self.vel_y < 0: # "下" (天井方向) に落ちている時 (着地)
-                    self.rect.top = platform.rect.bottom
-                    self.vel_y = 0
-                elif self.vel_y > 0: # "頭" (床方向) をぶつけた時
-                    self.rect.bottom = platform.rect.top
-                    self.vel_y = 0
+        remaining_y = self.vel_y
+        sign = 1 if remaining_y > 0 else -1
+        
+        # 1ステップあたりの最大移動量 (プレイヤーの高さ - 1ピクセル)
+        max_step_size = self.rect.height - 1 
 
+        while abs(remaining_y) > 0.001: # ほぼ 0 になるまで
+            
+            # 今回のステップで移動する量
+            step = min(abs(remaining_y), max_step_size) * sign
+            
+            self.true_y += step
+            self.rect.y = int(self.true_y)
+            
+            hit_list_y = pygame.sprite.spritecollide(self, platforms, False)
+
+            if hit_list_y:
+                # 衝突した場合
+                if current_gravity == "DOWN":
+                    if self.vel_y > 0: # 下に落ちている時 (着地)
+                        best_platform = min(hit_list_y, key=lambda p: p.rect.top)
+                        self.rect.bottom = best_platform.rect.top
+                    elif self.vel_y < 0: # 頭をぶつけた時
+                        best_platform = max(hit_list_y, key=lambda p: p.rect.bottom)
+                        self.rect.top = best_platform.rect.bottom
+                
+                elif current_gravity == "UP":
+                    if self.vel_y < 0: # "下" (天井方向) に落ちている時 (着地)
+                        best_platform = max(hit_list_y, key=lambda p: p.rect.bottom)
+                        self.rect.top = best_platform.rect.bottom
+                    elif self.vel_y > 0: # "頭" (床方向) をぶつけた時
+                        best_platform = min(hit_list_y, key=lambda p: p.rect.top)
+                        self.rect.bottom = best_platform.rect.top
+                
+                self.true_y = float(self.rect.y) # true_y を補正
+                self.vel_y = 0 # 速度をリセット
+                remaining_y = 0.0 # ループ停止
+                break # while ループを抜ける
+            
+            remaining_y -= step # 残りの移動量を減らす
+            
         # --- 6. 接地判定 ---
         self.on_ground = False
         self.standing_on.clear() 
@@ -228,7 +266,6 @@ class Player(pygame.sprite.Sprite):
         elif current_gravity == "UP":
             check_rect.y -= 1
         
-        # spritecollide は使えないため、手動でループ処理する
         ground_hit_list = []
         for platform in platforms:
             if check_rect.colliderect(platform.rect):
@@ -253,25 +290,18 @@ class Player(pygame.sprite.Sprite):
         # 2. 壁キックの判定 (空中で、壁に触れている)
         elif self.on_wall != 0:
             
-            # 壁側にキー入力しているかチェック
             is_pushing_into_wall = False
             
-            # 左壁 (self.on_wall == -1) に触れていて、左キーを押している
             if self.on_wall == -1 and (keys[pygame.K_LEFT] or keys[pygame.K_a]):
                  is_pushing_into_wall = True
-            
-            # 右壁 (self.on_wall == 1) に触れていて、右キーを押している
             elif self.on_wall == 1 and (keys[pygame.K_RIGHT] or keys[pygame.K_d]):
                  is_pushing_into_wall = True
 
-            # 壁に入力している時だけ、壁キックを実行
             if is_pushing_into_wall:
-                # 重力方向に応じて、キックの向きを変える
                 if current_gravity == "DOWN":
-                    self.vel_y = WALL_JUMP_STRENGTH_Y # 上向き (-19)
-                else: # current_gravity == "UP"
-                    self.vel_y = -WALL_JUMP_STRENGTH_Y # 下向き (19)
-                # (壁キックは現在の重力方向に関わらず、常に上方向へ飛ぶ)
+                    self.vel_y = WALL_JUMP_STRENGTH_Y 
+                else: 
+                    self.vel_y = -WALL_JUMP_STRENGTH_Y
                 self.vel_x = -self.on_wall * WALL_JUMP_STRENGTH_X
                 self.wall_jump_cooldown = self.WALL_JUMP_COOLDOWN_FRAMES
                 self.on_wall = 0
@@ -284,7 +314,12 @@ class Player(pygame.sprite.Sprite):
 
     def reset_position(self, x, y):
         self.rect.topleft = (x, y)
-        self.vel_x = 0 
+        
+        # ★ 修正: true_x, true_y もリセット
+        self.true_x = float(x)
+        self.true_y = float(y)
+        
+        self.vel_x = 0 # 速度もリセット
         self.vel_y = 0
         self.on_ground = False
         self.has_key = False
@@ -299,8 +334,9 @@ class Platform(pygame.sprite.Sprite):
     def __init__(self, x, y, up, down, left, right):
         super().__init__()
         self.image = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
-        self.image.fill((0, 0, 0, 0)) 
+        self.image.fill((0, 0, 0, 0)) # 完全に透過
         
+        # 隣に 'P' が「ない」辺だけ線を描画する
         if not up:
             pygame.draw.line(self.image, PLATFORM_BORDER_COLOR, (0, 0), (TILE_SIZE - 1, 0), 1)
         if not down:
@@ -325,10 +361,11 @@ class GravitySwitcher(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(x + TILE_SIZE // 2, y + TILE_SIZE // 2))
 
 class Spike(pygame.sprite.Sprite):
+    """トゲ（障害物）- 三角形"""
     def __init__(self, x, y):
         super().__init__()
         self.image = pygame.Surface((TILE_SIZE, TILE_SIZE // 2), pygame.SRCALPHA)
-        self.image.fill((0, 0, 0, 0)) 
+        self.image.fill((0, 0, 0, 0)) # 完全に透過
 
         points = [
             (0, TILE_SIZE // 2),
@@ -362,21 +399,26 @@ def setup_level(level_map):
     booster_platforms = pygame.sprite.Group()
     gravity_switchers = pygame.sprite.Group()
     
+    # ★ 修正: 新しいギミックのグループを追加
+    falling_spikes = pygame.sprite.Group()
+    patrolling_spikes = pygame.sprite.Group()
+    arrow_launchers = pygame.sprite.Group() # ★ 追加
+    
     player = None
     start_pos = (0, 0)
     
     map_height = len(level_map)
-    map_width = len(level_map[0])
     
     for y, row in enumerate(level_map):
+        current_row_len = len(row)
         for x, char in enumerate(row):
             world_x = x * TILE_SIZE
             world_y = y * TILE_SIZE
-            
-            has_neighbor_up = (y > 0 and level_map[y - 1][x] in ('P', 'B'))
-            has_neighbor_down = (y < map_height - 1 and level_map[y + 1][x] in ('P', 'B'))
-            has_neighbor_left = (x > 0 and level_map[y][x - 1] in ('P', 'B'))
-            has_neighbor_right = (x < map_width - 1 and level_map[y][x + 1] in ('P', 'B'))
+
+            has_neighbor_up = (y > 0 and x < len(level_map[y - 1]) and level_map[y - 1][x] in ('P', 'B', 'M')) # Mも壁とみなす
+            has_neighbor_down = (y < map_height - 1 and x < len(level_map[y + 1]) and level_map[y + 1][x] in ('P', 'B', 'M'))
+            has_neighbor_left = (x > 0 and row[x - 1] in ('P', 'B', 'M'))
+            has_neighbor_right = (x < current_row_len - 1 and row[x + 1] in ('P', 'B', 'M'))
 
             if char == 'P':
                 p = Platform(world_x, world_y, 
@@ -401,6 +443,27 @@ def setup_level(level_map):
                 s = Spike(world_x, world_y)
                 spikes.add(s)
                 all_sprites.add(s)
+            
+            elif char == 'F': # FallingSpike
+                fs = FallingSpike(world_x, world_y)
+                spikes.add(fs) 
+                falling_spikes.add(fs) 
+                all_sprites.add(fs)
+                
+            elif char == 'M': # PatrollingSpike
+                # (move_range=80, speed=2 をハードコード)
+                ps = PatrollingSpike(world_x, world_y, 80, 2) 
+                spikes.add(ps) 
+                patrolling_spikes.add(ps) 
+                all_sprites.add(ps)
+                
+            # ★ 追加: 'A' (ArrowLauncher) の処理
+            elif char == 'A':
+                # 'A' は右向き (direction=1) とする
+                al = ArrowLauncher(world_x, world_y, 1)
+                arrow_launchers.add(al)
+                all_sprites.add(al) # ランチャー自体も描画
+
             elif char == 'K': # Key
                 k = Key(world_x, world_y)
                 keys.add(k)
@@ -421,7 +484,8 @@ def setup_level(level_map):
 
     all_sprites.add(player)
     
-    return player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms
+    # ★ 修正: 戻り値に新しいグループを追加 (合計12個)
+    return player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms, falling_spikes, patrolling_spikes, arrow_launchers
 
 class Arrow(pygame.sprite.Sprite):
     """★ 弓矢（飛んでくる障害物）"""
@@ -437,34 +501,58 @@ class Arrow(pygame.sprite.Sprite):
     def update(self):
         self.rect.x += self.speed * self.direction
         
-        if self.rect.right < 0 or self.rect.left > SCREEN_WIDTH:
+        # ★ 修正: カメラの範囲外ではなく、ゲームワールドの範囲外で消えるように
+        # (簡易的に画面幅の2倍程度で消す)
+        if self.rect.right < -SCREEN_WIDTH or self.rect.left > SCREEN_WIDTH * 2:
             self.kill() 
 
 class ArrowLauncher(pygame.sprite.Sprite):
-    """★ 弓矢の発射台 (固定オブジェクトとして描画)"""
-    def __init__(self, x, y, direction):
+    """★ 弓矢の発射台 (自動発射機能付き)"""
+    def __init__(self, x, y, direction): # ★ ユーザーの元の __init__ を使用
         super().__init__()
         self.image = pygame.Surface((20, 20)) # 発射台のサイズ
         self.image.fill(LAUNCHER_COLOR)
         
+        # ★ 修正: TILE_SIZE の中央に配置
         if direction == -1: # 左向きに発射 (右側の壁)
-             # x座標は画面の端 (SCREEN_WIDTH) を指定し、toprightで配置
-             self.rect = self.image.get_rect(topright=(x, y)) 
+             self.rect = self.image.get_rect(topright=(x + TILE_SIZE, y + (TILE_SIZE // 2) - 10)) 
         else: # 右向きに発射 (左側の壁)
-             # x座標は 0 を指定し、topleftで配置
-             self.rect = self.image.get_rect(topleft=(x, y))
+             self.rect = self.image.get_rect(topleft=(x, y + (TILE_SIZE // 2) - 10))
              
         self.direction = direction # 弓矢の進行方向
 
+        # ★ 追加: 発射タイマー
+        self.last_spawn_time = pygame.time.get_ticks() + random.randint(0, 500) # 起動タイミングをずらす
+        self.spawn_interval = random.randint(MIN_ARROW_INTERVAL, MAX_ARROW_INTERVAL)
+
+    # ★ 追加: update メソッド (Arrowオブジェクトを返す)
+    def update(self):
+        now = pygame.time.get_ticks()
+        if now - self.last_spawn_time > self.spawn_interval:
+            self.last_spawn_time = now
+            self.spawn_interval = random.randint(MIN_ARROW_INTERVAL, MAX_ARROW_INTERVAL)
+            
+            # 矢の発射位置を計算
+            if self.direction == 1: # 右向き
+                spawn_x = self.rect.right + 1
+                spawn_y = self.rect.centery - 4 # Arrowの高さ(8) / 2
+            else: # 左向き
+                spawn_x = self.rect.left - 31 # Arrowの幅(30)
+                spawn_y = self.rect.centery - 4
+                
+            return Arrow(spawn_x, spawn_y, self.direction) # ★ 新しいArrowを返す
+        return None # 何もspawnしない
+
 class FallingSpike(Spike):
     """プレイヤーが近づくと落ちてくるトゲ"""
-    def __init__(self, x, y, w, h):
-        # 元のSpikeクラスの機能をもらう
-        super().__init__(x, y, w, h)
+    # ★ 修正: __init__ のシグネチャを (x, y) に修正
+    def __init__(self, x, y):
+        # ★ 修正: super() の呼び出しを修正
+        super().__init__(x, y)
         
         self.vel_y = 0
         self.is_active = False # 起動したかどうか
-        self.start_y = y       # スタート位置のY座標を覚えておく
+        self.start_y = self.rect.y # ★ 修正: self.rect.y から取得
 
     def update(self, platforms):
         # 起動(is_active)してたら、重力で落ちる
@@ -483,12 +571,11 @@ class FallingSpike(Spike):
                     self.vel_y = 0
                     # (地面に着いたら、もう動かなくていい)
                     self.is_active = False 
-
+        
     def activate(self):
         """トゲを起動させる（落ち始める）"""
         if not self.is_active and self.vel_y == 0:
             self.is_active = True
-            # print("トゲ起動！") # デバッグ用
 
     def reset_position(self):
         """トゲを元の位置に戻す"""
@@ -498,16 +585,17 @@ class FallingSpike(Spike):
 
 class PatrollingSpike(Spike):
     """指定された範囲を左右に往復するトゲ"""
-    def __init__(self, x, y, w, h, move_range, speed):
-        # 元のSpikeクラスの機能をもらう
-        super().__init__(x, y, w, h)
+    # ★ 修正: __init__ のシグネチャから w, h を削除
+    def __init__(self, x, y, move_range, speed):
+        # ★ 修正: super() の呼び出しを修正
+        super().__init__(x, y)
         
-        self.start_x = x             # スタートのX座標
-        self.end_x = x + move_range  # ここまで動く（右に move_range ピクセル）
+        self.start_x = x            # スタートのX座標
+        self.end_x = x + move_range  # ここまで動く
         self.vel_x = speed           # 動く速さ
         
         self.original_x = x          # リセット用の初期位置X
-        self.original_y = y          # リセット用の初期位置Y
+        self.original_y = self.rect.y # ★ 修正: self.rect.y から取得
         self.original_speed = speed  # リセット用の初期速度
 
     def update(self):
@@ -524,311 +612,235 @@ class PatrollingSpike(Spike):
 
     def reset_position(self):
         """トゲを元の位置に戻す"""
+        # ★ 修正: self.rect.y を original_y に
         self.rect.topleft = (self.original_x, self.original_y)
         self.vel_x = self.original_speed
 
 
-class Arrow(pygame.sprite.Sprite):
-    """★ 弓矢（飛んでくる障害物）"""
-    def __init__(self, x, y, direction):
-        super().__init__()
-        self.image = pygame.Surface((30, 8))
-        self.image.fill(ARROW_COLOR) 
-        self.rect = self.image.get_rect(topleft=(x, y))
-        
-        self.direction = direction # -1: 左向き, 1: 右向き
-        self.speed = 8 
-
-    def update(self):
-        self.rect.x += self.speed * self.direction
-        
-        if self.rect.right < 0 or self.rect.left > SCREEN_WIDTH:
-            self.kill() 
-
-class ArrowLauncher(pygame.sprite.Sprite):
-    """★ 弓矢の発射台 (固定オブジェクトとして描画)"""
-    def __init__(self, x, y, direction):
-        super().__init__()
-        self.image = pygame.Surface((20, 20)) # 発射台のサイズ
-        self.image.fill(LAUNCHER_COLOR)
-        
-        if direction == -1: # 左向きに発射 (右側の壁)
-             # x座標は画面の端 (SCREEN_WIDTH) を指定し、toprightで配置
-             self.rect = self.image.get_rect(topright=(x, y)) 
-        else: # 右向きに発射 (左側の壁)
-             # x座標は 0 を指定し、topleftで配置
-             self.rect = self.image.get_rect(topleft=(x, y))
-             
-        self.direction = direction # 弓矢の進行方向
-
-class FallingSpike(Spike):
-    """プレイヤーが近づくと落ちてくるトゲ"""
-    def __init__(self, x, y, w, h):
-        # 元のSpikeクラスの機能をもらう
-        super().__init__(x, y, w, h)
-        
-        self.vel_y = 0
-        self.is_active = False # 起動したかどうか
-        self.start_y = y       # スタート位置のY座標を覚えておく
-
-    def update(self, platforms):
-        # 起動(is_active)してたら、重力で落ちる
-        if self.is_active:
-            self.vel_y += GRAVITY
-            if self.vel_y > 10: # 最大落下速度
-                self.vel_y = 10
-            
-            self.rect.y += self.vel_y
-
-            # 地面(platforms)に着地したら止まる
-            hit_list = pygame.sprite.spritecollide(self, platforms, False)
-            for platform in hit_list:
-                if self.vel_y > 0: # 下に落ちてる時
-                    self.rect.bottom = platform.rect.top
-                    self.vel_y = 0
-                    # (地面に着いたら、もう動かなくていい)
-                    self.is_active = False 
-
-    def activate(self):
-        """トゲを起動させる（落ち始める）"""
-        if not self.is_active and self.vel_y == 0:
-            self.is_active = True
-            # print("トゲ起動！") # デバッグ用
-
-    def reset_position(self):
-        """トゲを元の位置に戻す"""
-        self.rect.y = self.start_y
-        self.vel_y = 0
-        self.is_active = False
-
-class PatrollingSpike(Spike):
-    """指定された範囲を左右に往復するトゲ"""
-    def __init__(self, x, y, w, h, move_range, speed):
-        # 元のSpikeクラスの機能をもらう
-        super().__init__(x, y, w, h)
-        
-        self.start_x = x             # スタートのX座標
-        self.end_x = x + move_range  # ここまで動く（右に move_range ピクセル）
-        self.vel_x = speed           # 動く速さ
-        
-        self.original_x = x          # リセット用の初期位置X
-        self.original_y = y          # リセット用の初期位置Y
-        self.original_speed = speed  # リセット用の初期速度
-
-    def update(self):
-        # 左右に移動
-        self.rect.x += self.vel_x
-        
-        # 範囲の端に来たら反転
-        if self.rect.x > self.end_x:
-            self.rect.x = self.end_x # はみ出ないように
-            self.vel_x = -self.vel_x # 反対方向へ
-        elif self.rect.x < self.start_x:
-            self.rect.x = self.start_x # はみ出ないように
-            self.vel_x = -self.vel_x # 反対方向へ
-
-    def reset_position(self):
-        """トゲを元の位置に戻す"""
-        self.rect.topleft = (self.original_x, self.original_y)
-        self.vel_x = self.original_speed
-
-
-# --- メインゲーム処理 ---
-# --- メインゲーム処理 ---
+# --- メインゲーム処理 (カメラ・ズーム対応) ---
 def main():
     gravity_direction = "DOWN"
     
     pygame.init()
+    # 実際のウィンドウ
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    # ゲームを描画する仮想スクリーン (小さい)
     game_surface = pygame.Surface((GAME_WIDTH, GAME_HEIGHT))
     
-    pygame.display.set_caption("Gravity Switch Prototype (Optimized)")
+    pygame.display.set_caption("Minimalism Prototype (Expanded)")
     clock = pygame.time.Clock()
 
     # --- レベルのセットアップ ---
-    # all_sprites = pygame.sprite.Group() 
-    # ( ... 古いセットアップコード (663行目〜734行目) をすべて削除 ... )
-    # floor = Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40) # <--- エラーの発生源 (削除)
-    # ( ... )
-    # next_arrow_launch_time = current_time + random.randint(MIN_ARROW_INTERVAL, MAX_ARROW_INTERVAL) # <--- (削除)
-
-
-    while True:
-        player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms = setup_level(LEVEL_MAP)
-        
+    # ★ 修正: 戻り値に (arrow_launchers) を追加 (合計12個)
+    player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms, falling_spikes, patrolling_spikes, arrow_launchers = setup_level(LEVEL_MAP)
+    
+    arrows = pygame.sprite.Group() # ★ 追加: 飛ぶ矢のグループ
+    
+    # ★ 修正: level_width はマップの0行目から取得する
+    if len(LEVEL_MAP) > 0:
         level_width = len(LEVEL_MAP[0]) * TILE_SIZE
-        level_height = len(LEVEL_MAP) * TILE_SIZE
+    else:
+        level_width = GAME_WIDTH
+    level_height = len(LEVEL_MAP) * TILE_SIZE
+    
+    camera_x = 0
+    camera_y = 0
+    
+    game_state = "PLAYING"
+    animation_timer = 0.0
+    animation_duration = 120.0 # (2秒)
+    current_screen_angle = 0.0
+    current_scale = 1.0
+    start_angle = 0.0
+    target_angle = 0.0
+    target_gravity = "DOWN"
+
+
+    while True: # ★ メインゲームループ
+        # --- イベント処理 (可変ジャンプ対応) ---
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+                
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE or event.key == pygame.K_UP or event.key == pygame.K_w:
+                    player.jump(gravity_direction) 
+            
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_SPACE or event.key == pygame.K_UP or event.key == pygame.K_w:
+                    player.cut_jump()
+
+        # --- 更新処理 ---
+        if game_state == "PLAYING":
+            
+            # ★ 修正: 弓矢の発射処理
+            for launcher in arrow_launchers:
+                new_arrow = launcher.update() # updateがArrowを返すかNoneを返す
+                if new_arrow:
+                    all_sprites.add(new_arrow)
+                    arrows.add(new_arrow)
+                    
+            arrows.update() # ★ 追加: 矢を動かす
+            
+            # (FallingSpike の起動ロジック (簡易版): プレイヤーが 100px 以内に近づいたら起動)
+            for fs in falling_spikes:
+                # ★ 修正: 起動ロジックを Y 座標も考慮するように変更
+                if (abs(player.rect.centerx - fs.rect.centerx) < 50 and 
+                    player.rect.bottom < fs.rect.top and 
+                    fs.rect.top - player.rect.bottom < 200): # 200px 下にいたら
+                     fs.activate()
+            
+            falling_spikes.update(platforms) # 引数 (platforms) が必要
+            patrolling_spikes.update()
+            
+            player.update(platforms, gravity_direction) 
+
+            # 落下ミス判定 (level_width チェックを修正)
+            if (player.rect.top > level_height or player.rect.bottom < 0 or
+                (level_width > 0 and (player.rect.left > level_width or player.rect.right < 0))):
+                
+                print("落下ミス！リスタートします。")
+                # (リスタート処理)
+                # ★ 修正: 新しいグループを .empty()
+                all_sprites.empty(); platforms.empty(); spikes.empty(); keys.empty()
+                doors.empty(); gravity_switchers.empty(); booster_platforms.empty()
+                falling_spikes.empty(); patrolling_spikes.empty()
+                arrow_launchers.empty() # ★ 追加
+                arrows.empty() # ★ 追加
+                
+                # ★ 修正: 12個の戻り値
+                player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms, falling_spikes, patrolling_spikes, arrow_launchers = setup_level(LEVEL_MAP)
+                
+                player.reset_position(*start_pos)
+                gravity_direction = "DOWN"
+                current_screen_angle = 0.0 
+                
+            # ブースター判定
+            is_on_booster = any(isinstance(p, BoosterPlatform) for p in player.standing_on) if player.on_ground else False
+            player.speed_multiplier = 2.0 if is_on_booster else 1.0
+            player.jump_multiplier = 10.0 if is_on_booster else 1.0
+
+            # 重力スイッチ判定
+            collided_switcher = pygame.sprite.spritecollideany(player, gravity_switchers)
+            if collided_switcher:
+                
+                target_gravity = "UP" if gravity_direction == "DOWN" else "DOWN"
+                print(f"スイッチ接触！ 次の重力: {target_gravity}") 
+
+                game_state = "ANIMATING"
+                animation_timer = 0.0
+                start_angle = current_screen_angle 
+                target_angle = get_angle_from_gravity(target_gravity)
+                
+                diff = target_angle - start_angle
+                if diff > 180: target_angle -= 360
+                elif diff < -180: target_angle += 360
+                
+                collided_switcher.kill() 
+                print(f"重力変更開始: {gravity_direction} -> {target_gravity}")
+            
+            # カメラの更新
+            target_camera_x = player.rect.centerx - (GAME_WIDTH // 3) 
+            target_camera_x = max(0, min(target_camera_x, level_width - GAME_WIDTH))
+            camera_x += (target_camera_x - camera_x) / 20.0 
+            
+            target_camera_y = player.rect.centery - (GAME_HEIGHT // 2)
+            target_camera_y = max(0, min(target_camera_y, level_height - GAME_HEIGHT))
+            camera_y += (target_camera_y - camera_y) / 20.0 
+            
+            # ★ 追加: 弓矢との衝突判定
+            if pygame.sprite.spritecollide(player, arrows, True): # 矢に当たったら消す(True)
+                print("矢に当たった！リスタートします。")
+                all_sprites.empty(); platforms.empty(); spikes.empty(); keys.empty()
+                doors.empty(); gravity_switchers.empty(); booster_platforms.empty()
+                falling_spikes.empty(); patrolling_spikes.empty()
+                arrow_launchers.empty() # ★ 追加
+                arrows.empty() # ★ 追加
+
+                # ★ 修正: 12個の戻り値
+                player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms, falling_spikes, patrolling_spikes, arrow_launchers = setup_level(LEVEL_MAP)
+                
+                player.reset_position(*start_pos)
+                gravity_direction = "DOWN"
+                current_screen_angle = 0.0
+            
+            # トゲとの衝突判定 (弓矢の判定の後に行う)
+            elif pygame.sprite.spritecollide(player, spikes, False):
+                print("ミス！リスタートします。")
+                all_sprites.empty(); platforms.empty(); spikes.empty(); keys.empty()
+                doors.empty(); gravity_switchers.empty(); booster_platforms.empty()
+                falling_spikes.empty(); patrolling_spikes.empty()
+                arrow_launchers.empty() # ★ 追加
+                arrows.empty() # ★ 追加
+
+                # ★ 修正: 12個の戻り値
+                player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms, falling_spikes, patrolling_spikes, arrow_launchers = setup_level(LEVEL_MAP)
+                
+                player.reset_position(*start_pos)
+                gravity_direction = "DOWN"
+                current_screen_angle = 0.0
+
+            # カギ・トビラ判定
+            if pygame.sprite.spritecollide(player, keys, True):
+                player.has_key = True
+                print("カギを手に入れた！")
+            
+            if pygame.sprite.spritecollideany(player, doors) and player.has_key:
+                print("クリア！おめでとう！")
+                pygame.quit()
+                sys.exit()
+
+            current_scale = 1.0
+
+        elif game_state == "ANIMATING":
+            # アニメーション中の更新処理
+            animation_timer += 1
+            progress = min(animation_timer / animation_duration, 1.0)
+            ease_progress = 1 - pow(1 - progress, 3) 
+
+            current_scale = 1.0 - 0.8 * math.sin(ease_progress * math.pi) 
+            current_screen_angle = start_angle + (target_angle - start_angle) * ease_progress
+            
+            if progress >= 1.0:
+                game_state = "PLAYING"
+                gravity_direction = target_gravity
+                current_screen_angle = get_angle_from_gravity(target_gravity)
+                print(f"重力が {gravity_direction} に変更完了！")
+
+            
+        # --- 描画処理 (ズーム・回転アニメーション対応) ---
         
-        camera_x = 0
-        camera_y = 0
+        # 1. 仮想スクリーン (game_surface) にゲーム内容を描画
+        game_surface.fill(BLACK) 
+        for sprite in all_sprites:
+            screen_x = sprite.rect.x - camera_x
+            screen_y = sprite.rect.y - camera_y
+            game_surface.blit(sprite.image, (screen_x, screen_y)) 
         
-        game_state = "PLAYING"
-        animation_timer = 0.0
-        animation_duration = 120.0 # (2秒)
-        current_screen_angle = 0.0
-        current_scale = 1.0
-        start_angle = 0.0
-        target_angle = 0.0
-        target_gravity = "DOWN"
+        # 2. game_surface を screen サイズに引き伸ばした「基本表示画面」を作成
+        base_display_surface = pygame.transform.scale(game_surface, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        
+        # 3. 実際のウィンドウ (screen) を白で塗りつぶす (アニメーション背景用)
+        screen.fill(WHITE)
 
-        while True:
-            # --- イベント処理 ---
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-                
-                if game_state == "PLAYING":
-                    if event.type == pygame.KEYDOWN:
-                        
-                        if event.key == pygame.K_SPACE:
-                            player.jump(gravity_direction) 
-                        
-                        elif gravity_direction == "DOWN":
-                            if event.key == pygame.K_UP or event.key == pygame.K_w:
-                                player.jump(gravity_direction) 
-                        elif gravity_direction == "UP":
-                                if event.key == pygame.K_DOWN or event.key == pygame.K_s:
-                                    player.jump(gravity_direction) 
-                        
-                    if event.type == pygame.KEYUP:
-                        if gravity_direction == "DOWN":
-                            if event.key == pygame.K_SPACE or event.key == pygame.K_UP or event.key == pygame.K_w:
-                                player.cut_jump()
+        # 4. アニメーション変数に基づいて「基本表示画面」を変形
+        scaled_width = int(SCREEN_WIDTH * current_scale)
+        scaled_height = int(SCREEN_HEIGHT * current_scale)
+        scaled_surface = pygame.transform.scale(base_display_surface, (scaled_width, scaled_height))
+        
+        rotated_surface = pygame.transform.rotate(scaled_surface, current_screen_angle)
+        
+        # 5. 変形させたサーフェスを「画面の中央」に描画
+        center_x = SCREEN_WIDTH // 2
+        center_y = SCREEN_HEIGHT // 2
+        draw_rect = rotated_surface.get_rect(center=(center_x, center_y)) 
+        
+        screen.blit(rotated_surface, draw_rect)
 
-            # --- 更新処理 ---
-            if game_state == "PLAYING":
-                player.update(platforms, gravity_direction) 
-
-                # 落下ミス判定
-                if (player.rect.top > level_height or player.rect.bottom < 0 or
-                    player.rect.left > level_width or player.rect.right < 0):
-                    
-                    print("落下ミス！リスタートします。")
-                    all_sprites.empty(); platforms.empty(); spikes.empty(); keys.empty()
-                    doors.empty(); gravity_switchers.empty(); booster_platforms.empty()
-                    player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms = setup_level(LEVEL_MAP)
-                    
-                    player.reset_position(*start_pos)
-                    gravity_direction = "DOWN"
-                    current_screen_angle = 0.0 
-                    
-                # ブースター判定
-                is_on_booster = any(isinstance(p, BoosterPlatform) for p in player.standing_on) if player.on_ground else False
-                player.speed_multiplier = 2.0 if is_on_booster else 1.0
-                # ジャンプ力
-                player.jump_multiplier = 10.0 if is_on_booster else 1.0
-
-                # 重力スイッチ判定
-                collided_switcher = pygame.sprite.spritecollideany(player, gravity_switchers)
-                if collided_switcher:
-                    
-                    target_gravity = "UP" if gravity_direction == "DOWN" else "DOWN"
-                    print(f"スイッチ接触！ 次の重力: {target_gravity}") 
-
-                    game_state = "ANIMATING"
-                    animation_timer = 0.0
-                    start_angle = current_screen_angle 
-                    target_angle = get_angle_from_gravity(target_gravity)
-                    
-                    diff = target_angle - start_angle
-                    if diff > 180: target_angle -= 360
-                    elif diff < -180: target_angle += 360
-                    
-                    collided_switcher.kill() 
-                    print(f"重力変更開始: {gravity_direction} -> {target_gravity}")
-                
-                # カメラの更新
-                target_camera_x = player.rect.centerx - (GAME_WIDTH // 3) 
-                target_camera_x = max(0, min(target_camera_x, level_width - GAME_WIDTH))
-                camera_x += (target_camera_x - camera_x) / 20.0 
-                
-                target_camera_y = player.rect.centery - (GAME_HEIGHT // 2)
-                target_camera_y = max(0, min(target_camera_y, level_height - GAME_HEIGHT))
-                camera_y += (target_camera_y - camera_y) / 20.0 
-                
-                # トゲとの衝突判定
-                if pygame.sprite.spritecollide(player, spikes, False):
-                    print("ミス！リスタートします。")
-                    all_sprites.empty(); platforms.empty(); spikes.empty(); keys.empty()
-                    doors.empty(); gravity_switchers.empty(); booster_platforms.empty()
-                    player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms = setup_level(LEVEL_MAP)
-                    
-                    player.reset_position(*start_pos)
-                    gravity_direction = "DOWN"
-                    current_screen_angle = 0.0
-
-                # --- 更新処理 ---
-                # ( ... 弓矢や古いトゲのロジック (844行目〜917行目) を削除 ... )
-                # current_time = pygame.time.get_ticks() # <--- (削除)
-                # if current_time > next_arrow_launch_time: # <--- (削除)
-                # player.update(platforms) # <--- (削除 - 重複)
-                # arrows.update() # <--- (削除)
-                # ...
-                # if pygame.sprite.spritecollide(player, arrows, True): # <--- (削除)
-
-
-                # カギ・トビラ判定
-                # <--- (注: 'if game_state == "PLAYING":' のブロック内に正しくインデント)
-                if pygame.sprite.spritecollide(player, keys, True):
-                    player.has_key = True
-                    print("カギを手に入れた！")
-                
-                if pygame.sprite.spritecollideany(player, doors) and player.has_key:
-                    print("クリア！おめでとう！")
-                    pygame.quit()
-                    sys.exit()
-
-                current_scale = 1.0
-
-            elif game_state == "ANIMATING":
-                # アニメーション中の更新処理
-                animation_timer += 1
-                progress = min(animation_timer / animation_duration, 1.0)
-                ease_progress = 1 - pow(1 - progress, 3) 
-
-                current_scale = 1.0 - 0.8 * math.sin(ease_progress * math.pi) 
-                current_screen_angle = start_angle + (target_angle - start_angle) * ease_progress
-                
-                if progress >= 1.0:
-                    game_state = "PLAYING"
-                    gravity_direction = target_gravity
-                    current_screen_angle = get_angle_from_gravity(target_gravity)
-                    print(f"重力が {gravity_direction} に変更完了！")
-
-            
-            # --- 描画処理 (ズーム・回転アニメーション対応) ---
-            
-            # 1. 仮想スクリーン (game_surface) にゲーム内容を描画
-            game_surface.fill(BLACK) 
-            for sprite in all_sprites:
-                screen_x = sprite.rect.x - camera_x
-                screen_y = sprite.rect.y - camera_y
-                game_surface.blit(sprite.image, (screen_x, screen_y)) 
-            
-            # 2. game_surface を screen サイズに引き伸ばした「基本表示画面」を作成
-            base_display_surface = pygame.transform.scale(game_surface, (SCREEN_WIDTH, SCREEN_HEIGHT))
-            
-            # 3. 実際のウィンドウ (screen) を白で塗りつぶす (アニメーション背景用)
-            screen.fill(WHITE)
-
-            # 4. アニメーション変数に基づいて「基本表示画面」を変形
-            scaled_width = int(SCREEN_WIDTH * current_scale)
-            scaled_height = int(SCREEN_HEIGHT * current_scale)
-            scaled_surface = pygame.transform.scale(base_display_surface, (scaled_width, scaled_height))
-            
-            rotated_surface = pygame.transform.rotate(scaled_surface, current_screen_angle)
-            
-            # 5. 変形させたサーフェスを「画面の中央」に描画
-            center_x = SCREEN_WIDTH // 2
-            center_y = SCREEN_HEIGHT // 2
-            draw_rect = rotated_surface.get_rect(center=(center_x, center_y)) 
-            
-            screen.blit(rotated_surface, draw_rect)
-
-            # 6. 実際の画面を更新
-            pygame.display.flip()
-            clock.tick(FPS)
+        # 6. 実際の画面を更新
+        pygame.display.flip()
+        clock.tick(FPS)
 
 if __name__ == "__main__":
     main()
