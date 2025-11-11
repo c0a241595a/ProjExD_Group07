@@ -174,7 +174,7 @@ LEVEL_MAP = [
     "V   V         S            CSS               SC",  # 4
     "VSS V                      C                  C",  # 5
     "VVV VVVVVVVVVVVVVVVVV      C     LLLLLLLLLLLLLL",  # 6
-    "V         VSSSSSSSSSOOOOOOO      SA        MM L",  # 7
+    "V         VSSSSSSSSSOOOOOOOO     SA        MM L",  # 7
     "V         V                       L           L",  # 8
     "V     G   V   OO       OOOOOOOOOOOL           L",  # 9
     "V     VVVVV            Y YYYYYYYY Y    LLLL   L",  # 10
@@ -182,7 +182,7 @@ LEVEL_MAP = [
     "Y     Y            YA                  L      L",  # 12
     "Y     YK               SSSSSSSSSSSS    A      L",  # 13
     "Y     YYYYYYYYYYYYYYYYYYYYYYYYYYYYY    L      L",  # 14
-    "Y     Y                           Y    LF    LL",  # 15
+    "Y     Y                           Y    LF     L",  # 15
     "Y     Y                           YYYYYLLLL  DC",  # 16
     "R     R                                   LLLLL",  # 17
     "A                                 RRRRR     F R",  # 18
