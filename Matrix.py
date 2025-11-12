@@ -3,6 +3,7 @@ import sys
 import os
 import random
 import math
+import json # ★★★ JSONモジュールを追加 ★★★
 
 # スクリプトのディレクトリをワーキングディレクトリに設定
 if getattr(sys, "frozen", False):
@@ -164,6 +165,10 @@ JUMP_STRENGTH = -10  # ジャンプ力
 MAX_SPEED = 6  # プレイヤーの最高速度
 ACCELERATION = 0.4  # 加速の度合い
 FRICTION_FORCE = 0.1  # 摩擦力 (★滑りを増やすため 0.1)
+
+# ファイル名
+BEST_TIME_FILE = "best_time.json"
+
 
 # --- ステージの設計図 (8色に増強、灰色Pは廃止) ---
 LEVEL_MAP = [
@@ -1102,7 +1107,7 @@ def setup_level(level_map):
                 al = ArrowLauncher(world_x, world_y, direction)
                 arrow_launchers.add(al)
                 all_sprites.add(al)
-            # ▲▲▲ ★★★ 'A' の修正ブロックここまで ★★★ ▲▲▲
+            # ▲▲▲ ★★★ 'A' の修正ブロックここまで ★▲▲▲
 
             elif char == "K":  # Key
                 k = Key(world_x, world_y)
@@ -1119,10 +1124,12 @@ def setup_level(level_map):
                 player = Player(player_x, player_y)
 
     if player is None:
-        print("エラー: プレイヤー(@)がマップにいません！")
-        sys.exit()
+        # タイトル画面から開始するため、ここではエラーを出さず None のまま返す
+        pass 
+        # print("エラー: プレイヤー(@)がマップにいません！")
+        # sys.exit()
 
-    all_sprites.add(player)
+    # setup_level() はタイトル画面からは呼ばれないため、playerがNoneである可能性を考慮
 
     return (
         player,
@@ -1155,14 +1162,14 @@ class Arrow(pygame.sprite.Sprite):
         self.mask = pygame.mask.from_surface(self.image)
 
     # ▼▼▼ ★★★ 修正後の update メソッド ★★★ ▼▼▼
-    def update(self, *args):  # ★ 引数を *args に変更 (カメラ座標を受け取らない)
+    def update(self, *args):  # ★ 引数を *args に変更 (カメラ座標を渡さない)
         self.rect.x += self.speed * self.direction
 
         # 画面外での自動消滅ロジックを「削除」
         # これにより、プレイヤーが遠くにいても矢は壁に当たるまで飛び続けます。
         # (壁に当たった時の消滅は main ループの groupcollide で処理されます)
 
-    # ▲▲▲ ★★★ 修正ここまで ★★★ ▲▲▲
+    # ▲▲▲ ★★★ 修正ここまで ★▲▲▲
 
 
 class ArrowLauncher(pygame.sprite.Sprite):
@@ -1401,8 +1408,39 @@ class PatrollingSpike(Spike):
 # -----------------------------------------------------------------
 
 
+# ★★★ タイム保存・ロード関数 (新規追加) ★★★
+
+def save_best_time(new_time):
+    """ベストタイムをファイルに保存する"""
+    best_time = load_best_time()
+    
+    # 既存のタイムが記録されているか、または新しいタイムが既存のタイムより短い場合のみ更新
+    if best_time is None or new_time < best_time:
+        try:
+            with open(BEST_TIME_FILE, 'w') as f:
+                json.dump(new_time, f)
+            return new_time # 新しいベストタイムを返す
+        except Exception as e:
+            # print(f"エラー: ベストタイムの保存に失敗しました: {e}")
+            return best_time # 保存失敗時は既存のタイムを返す
+    return best_time # 更新なし
+
+def load_best_time():
+    """ベストタイムをファイルから読み込む"""
+    try:
+        if os.path.exists(BEST_TIME_FILE):
+            with open(BEST_TIME_FILE, 'r') as f:
+                return json.load(f)
+        return None  # ファイルがない場合はNoneを返す
+    except Exception as e:
+        # print(f"エラー: ベストタイムの読み込みに失敗しました: {e}")
+        return None
+
+# ★★★ ここまで ★★★
+
+
 # -----------------------------------------------------------------
-# ▼▼▼ main 関数 (画面回転を「復活」) ▼▼▼
+# ▼▼▼ main 関数 (タイトル画面を追加) ▼▼▼
 # -----------------------------------------------------------------
 def main():
     gravity_direction = "DOWN"
@@ -1413,10 +1451,14 @@ def main():
     pygame.font.init()
     try:
         font = pygame.font.Font(None, 50)  # デフォルトフォント、サイズ50
+        font_time = pygame.font.Font(None, 36)
+        font_title = pygame.font.Font(None, 80) # ★タイトル用
     except:
         font = pygame.font.Font(pygame.font.get_default_font(), 50)
+        font_time = pygame.font.Font(pygame.font.get_default_font(), 36)
+        font_title = pygame.font.Font(pygame.font.get_default_font(), 80) # ★タイトル用
 
-    # --- GAME OVER用 テキスト (★ SCREEN サイズ基準に変更) ---
+    # --- GAME OVER用 テキスト ---
     text_game_over = font.render("GAME OVER", True, WHITE)
     text_retry = font.render("Press Enter to Retry", True, WHITE)
     text_game_over_rect = text_game_over.get_rect(
@@ -1426,9 +1468,9 @@ def main():
         center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30)
     )
 
-    # ★★★ クリア画面用のテキスト (★ SCREEN サイズ基準に変更) ★★★
+    # ★★★ クリア画面用のテキスト ★★★
     text_game_clear = font.render("GAME CLEAR!", True, WHITE)
-    text_quit = font.render("Press Enter to Quit", True, WHITE)
+    text_quit = font.render("Press Enter to Title", True, WHITE) # QuitからTitleに変更
     text_game_clear_rect = text_game_clear.get_rect(
         center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30)
     )
@@ -1436,6 +1478,19 @@ def main():
         center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30)
     )
     # ★★★ ここまで ★★★
+
+    # ★★★ タイトル画面用のテキスト (新規追加) ★★★
+    text_title_name = font_title.render("MATRIX PROTOTYPE", True, WHITE)
+    text_start_game = font.render("START GAME", True, WHITE)
+    text_best_time_menu = font.render("BEST TIME", True, WHITE)
+    text_return_to_title = font.render("Press Enter to Return", True, WHITE)
+
+    text_title_name_rect = text_title_name.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 150))
+    text_start_game_rect = text_start_game.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+    text_best_time_menu_rect = text_best_time_menu.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 70))
+    text_return_to_title_rect = text_return_to_title.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 150))
+    # ★★★ ここまで ★★★
+
 
     # ★★★ 暗転用サーフェスの作成 (★ SCREEN サイズ基準に変更) ★★★
     dark_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -1447,47 +1502,105 @@ def main():
     pygame.display.set_caption("Minimalism Prototype (Expanded)")
     clock = pygame.time.Clock()
 
-    (
-        player,
-        start_pos,
-        all_sprites,
-        platforms,
-        spikes,
-        keys,
-        doors,
-        gravity_switchers,
-        booster_platforms,
-        falling_spikes,
-        patrolling_spikes,
-        arrow_launchers,
-    ) = setup_level(LEVEL_MAP)
-
+    # ゲーム初期化に必要な変数を None で初期化
+    player = None
+    start_pos = (0, 0)
+    all_sprites = pygame.sprite.Group()
+    platforms = pygame.sprite.Group()
+    spikes = pygame.sprite.Group()
+    keys = pygame.sprite.Group()
+    doors = pygame.sprite.Group()
+    gravity_switchers = pygame.sprite.Group()
+    booster_platforms = pygame.sprite.Group()
+    falling_spikes = pygame.sprite.Group()
+    patrolling_spikes = pygame.sprite.Group()
+    arrow_launchers = pygame.sprite.Group()
     arrows = pygame.sprite.Group()
-
+    
+    # マップサイズを計算（暫定）
     if len(LEVEL_MAP) > 0:
         level_width = max(len(row) for row in LEVEL_MAP) * TILE_SIZE
     else:
         level_width = GAME_WIDTH
     level_height = len(LEVEL_MAP) * TILE_SIZE
 
+
     camera_x = 0
     camera_y = 0
 
-    game_state = "PLAYING"  # ★ ステート管理
+    # ★★★ 初期ステートを TITLE_SCREEN に変更 ★★★
+    game_state = "TITLE_SCREEN"
+    
+    # ★★★ タイトル画面の選択肢用変数 ★★★
+    title_menu_selection = 0 # 0: START GAME, 1: BEST TIME
+    
+    # ★★★ ベストタイム表示用変数 ★★★
+    best_time_display = load_best_time()
+    final_clear_time = None # クリア時に確定したタイム
+
+    # ★★★ タイム計測用の変数を追加 ★★★
+    play_time_seconds = 0.0
 
     # ★★★ アニメーション関連の変数を復活 ★★★
     animation_timer = 0.0  # アニメーションの進捗 (0.0 -> 1.0)
     ANIMATION_DURATION_SECONDS = 0.5  # アニメーションの所要時間 (秒)
-
-    # target_gravity はアニメーション後の重力方向
     target_gravity = "DOWN"
-
-    # 現在の画面の回転角度 (0.0 or 180.0)
     current_angle = 0.0
-    # アニメーション中の目標角度
     target_angle = 0.0
     # ★★★ ここまで ★★★
 
+    # --- ゲーム起動時のレベル初期化を関数化 ---
+    def initialize_game():
+        nonlocal player, start_pos, all_sprites, platforms, spikes, keys, doors, gravity_switchers, booster_platforms, falling_spikes, patrolling_spikes, arrow_launchers, arrows, gravity_direction, play_time_seconds, current_angle, target_angle, animation_timer, target_gravity
+        
+        # 既存のグループをクリア
+        all_sprites.empty()
+        platforms.empty()
+        spikes.empty()
+        keys.empty()
+        doors.empty()
+        gravity_switchers.empty()
+        booster_platforms.empty()
+        falling_spikes.empty()
+        patrolling_spikes.empty()
+        arrow_launchers.empty()
+        arrows.empty() # 矢のグループもクリア
+        
+        # setup_levelを呼び出す
+        (
+            player,
+            start_pos,
+            all_sprites,
+            platforms,
+            spikes,
+            keys,
+            doors,
+            gravity_switchers,
+            booster_platforms,
+            falling_spikes,
+            patrolling_spikes,
+            arrow_launchers,
+        ) = setup_level(LEVEL_MAP)
+
+        # プレイヤーが正常に作成されたか確認
+        if player is None:
+            print("エラー: プレイヤー(@)がマップにいません！")
+            sys.exit()
+
+        player.reset_position(*start_pos)
+        gravity_direction = "DOWN"
+        play_time_seconds = 0.0
+        current_angle = 0.0
+        target_angle = 0.0
+        animation_timer = 0.0
+        target_gravity = "DOWN"
+        
+        # 初期化された全スプライトをall_spritesに追加
+        all_sprites.add(player)
+        all_sprites.add(platforms, spikes, keys, doors, gravity_switchers, booster_platforms, falling_spikes, patrolling_spikes, arrow_launchers)
+        
+        return arrows # arrowsグループを返す (今回は空のはずだが、互換性のため)
+    
     # --- ★ 星空の背景を生成 ★ ---
     stars = []
     for _ in range(NUM_STARS):
@@ -1500,7 +1613,11 @@ def main():
         stars.append((x, y, radius, color))
     # --- ★ ここまで ★ ---
 
+
     while True:
+        # --- 共通のタイマー処理 ---
+        delta_time_seconds = clock.get_time() / 1000.0 # 前のフレームからの経過時間 (秒)
+
         # --- イベント処理 (共通) ---
         events = pygame.event.get()
         for event in events:
@@ -1508,8 +1625,31 @@ def main():
                 pygame.quit()
                 sys.exit()
 
+            # ★★★ TITLE_SCREEN ステートの入力処理 ★★★
+            if game_state == "TITLE_SCREEN":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_DOWN or event.key == pygame.K_s:
+                        title_menu_selection = (title_menu_selection + 1) % 2
+                    elif event.key == pygame.K_UP or event.key == pygame.K_w:
+                        title_menu_selection = (title_menu_selection - 1) % 2
+                    elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
+                        if title_menu_selection == 0:
+                            # START GAME を選択
+                            arrows = initialize_game() # ゲームを初期化
+                            game_state = "PLAYING"
+                        else:
+                            # BEST TIME を選択
+                            best_time_display = load_best_time() # 最新のタイムをロード
+                            game_state = "BEST_TIME_SCREEN"
+                            
+            # ★★★ BEST_TIME_SCREEN ステートの入力処理 ★★★
+            elif game_state == "BEST_TIME_SCREEN":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
+                        game_state = "TITLE_SCREEN"
+
             # ▼▼▼ PLAYING 中のみ反応するキー入力 ▼▼▼
-            if game_state == "PLAYING":
+            elif game_state == "PLAYING":
                 if event.type == pygame.KEYDOWN:
                     if (
                         event.key == pygame.K_SPACE
@@ -1526,11 +1666,14 @@ def main():
                     ):
                         player.cut_jump(
                             gravity_direction
-                        )  # 引数に gravity_direction を渡す
+                        )
             # ▲▲▲ PLAYING 中のキー入力ここまで ▲▲▲
 
         # --- 更新処理 ---
         if game_state == "PLAYING":
+
+            # ★★★ プレイ時間を加算 ★★★
+            play_time_seconds += delta_time_seconds
 
             # 弓矢の発射
             for launcher in arrow_launchers:
@@ -1539,9 +1682,7 @@ def main():
                     all_sprites.add(new_arrow)
                     arrows.add(new_arrow)
 
-            # ▼▼▼ ★★★ 修正箇所 ★★★ ▼▼▼
-            arrows.update()  # ★ 引数を削除 (カメラ座標を渡さない)
-            # ▲▲▲ ★★★ 修正ここまで ★★★ ▲▲▲
+            arrows.update()
 
             pygame.sprite.groupcollide(arrows, platforms, True, False)  # 矢と壁の衝突
 
@@ -1609,7 +1750,7 @@ def main():
                 )
             ):
 
-                print("落下ミス！")
+                # print("落下ミス！")
                 game_state = "GAME_OVER"
 
             # ブースター判定
@@ -1639,7 +1780,7 @@ def main():
 
                 game_state = "ANIMATING"  # ステートをアニメーションに変更
                 animation_timer = 0.0  # アニメーションタイマーをリセット
-                print(f"アニメーション開始！ ターゲット: {target_gravity}")
+                # print(f"アニメーション開始！ ターゲット: {target_gravity}")
                 collided_switcher.kill()
 
             # カメラの更新 (プレイヤー中央)
@@ -1661,14 +1802,14 @@ def main():
             if pygame.sprite.spritecollide(
                 player, arrows, True, pygame.sprite.collide_mask
             ):
-                print("矢に当たった！")
+                # print("矢に当たった！")
                 game_state = "GAME_OVER"
 
             # トゲとの衝突 (Mask判定) (★ GAME_OVER に変更)
             elif pygame.sprite.spritecollide(
                 player, spikes, False, pygame.sprite.collide_mask
             ):
-                print("ミス！")
+                # print("ミス！")
                 game_state = "GAME_OVER"
 
             # カギ・トビラ判定
@@ -1677,7 +1818,7 @@ def main():
                 player, keys, True, pygame.sprite.collide_mask
             ):
                 player.has_key = True
-                print("カギを手に入れた！")
+                # print("カギを手に入れた！")
 
             # GAME_CLEAR ステートへ
             # ★ トビラの衝突判定を collide_mask に変更 ★
@@ -1687,8 +1828,10 @@ def main():
                 )
                 and player.has_key
             ):
-                print("クリア！おめでとう！")
-                game_state = "GAME_CLEAR"  # 終了する代わりにステートを変更
+                # print("クリア！おめでとう！")
+                final_clear_time = play_time_seconds # タイムを確定
+                best_time_display = save_best_time(final_clear_time) # タイムを保存・更新
+                game_state = "GAME_CLEAR"
 
         # ★★★ GAME_OVER ステートの処理 ★★★
         elif game_state == "GAME_OVER":
@@ -1696,65 +1839,27 @@ def main():
             for event in events:  # 共通イベントキューをチェック
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
-
-                        # --- リセット処理 (ここですべて行う) ---
-                        print("リスタートします。")
-                        all_sprites.empty()
-                        platforms.empty()
-                        spikes.empty()
-                        keys.empty()
-                        doors.empty()
-                        gravity_switchers.empty()
-                        booster_platforms.empty()
-                        falling_spikes.empty()
-                        patrolling_spikes.empty()
-                        arrow_launchers.empty()
-                        arrows.empty()
-
-                        (
-                            player,
-                            start_pos,
-                            all_sprites,
-                            platforms,
-                            spikes,
-                            keys,
-                            doors,
-                            gravity_switchers,
-                            booster_platforms,
-                            falling_spikes,
-                            patrolling_spikes,
-                            arrow_launchers,
-                        ) = setup_level(LEVEL_MAP)
-
-                        player.reset_position(*start_pos)
-                        gravity_direction = "DOWN"  # ★リセット時は必ずDOWNに戻す
-
-                        # ★ アニメーション関連のリセット (追加) ★
-                        current_angle = 0.0
-                        target_angle = 0.0
-                        animation_timer = 0.0
-                        target_gravity = "DOWN"
-
+                        # print("リスタートします。")
+                        arrows = initialize_game() 
                         game_state = "PLAYING"
-
-                        break  # リセットしたらこのフレームの処理は終了
+                        break
         # ★★★ GAME_OVER 処理ここまで ★★★
 
-        # ★★★ GAME_CLEAR ステートの処理 ★★★
+        # ★★★ GAME_CLEAR ステートの処理 (タイトル画面に戻る) ★★★
         elif game_state == "GAME_CLEAR":
             # Enterキーが押されるまで待機
             for event in events:  # 共通イベントキューをチェック
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
-                        print("ゲームを終了します。")
-                        pygame.quit()
-                        sys.exit()
+                        # print("タイトル画面に戻ります。")
+                        game_state = "TITLE_SCREEN"
+                        break
         # ★★★ GAME_CLEAR 処理ここまで ★★★
 
         # ★★★ ANIMATING ステートの処理 (復活) ★★★
         elif game_state == "ANIMATING":
             # 1. 時間を経過させる (clock.tick() から秒数を計算)
-            delta_time_seconds = clock.get_time() / 1000.0
+            # (delta_time_seconds はループ冒頭で計算済み)
 
             # アニメーション時間が 0 の場合でもゼロ除算にならないように
             if ANIMATION_DURATION_SECONDS > 0:
@@ -1763,12 +1868,7 @@ def main():
                 animation_timer = 1.0  # 即座に終了
 
             # 2. 現在の角度を計算 (線形補間)
-            # 現在の角度 (アニメ開始時の角度)
             current_angle_start = 180.0 if gravity_direction == "UP" else 0.0
-
-            # 補間
-            # 例: 0 -> 180 (timer=0.2): 0 + (180 - 0) * 0.2 = 36
-            # 例: 180 -> 0 (timer=0.2): 180 + (0 - 180) * 0.2 = 180 - 36 = 144
             current_angle = (
                 current_angle_start
                 + (target_angle - current_angle_start) * animation_timer
@@ -1779,25 +1879,27 @@ def main():
                 current_angle = target_angle  # 角度をターゲットに固定
                 gravity_direction = target_gravity  # 重力を本適用
                 game_state = "PLAYING"  # ステートを戻す
-                print(f"アニメーション終了。 重力: {gravity_direction}")
+                # print(f"アニメーション終了。 重力: {gravity_direction}")
 
             # ★ アニメーション中もカメラはプレイヤーを追従する
-            target_camera_x = player.rect.centerx - GAME_WIDTH // 2
-            target_camera_y = player.rect.centery - GAME_HEIGHT // 2
+            if player: # playerが存在する場合のみ
+                target_camera_x = player.rect.centerx - GAME_WIDTH // 2
+                target_camera_y = player.rect.centery - GAME_HEIGHT // 2
 
-            if level_width > GAME_WIDTH:
-                camera_x = max(0, min(target_camera_x, level_width - GAME_WIDTH))
-            else:
-                camera_x = (level_width - GAME_WIDTH) // 2
+                if level_width > GAME_WIDTH:
+                    camera_x = max(0, min(target_camera_x, level_width - GAME_WIDTH))
+                else:
+                    camera_x = (level_width - GAME_WIDTH) // 2
 
-            if level_height > GAME_HEIGHT:
-                camera_y = max(0, min(target_camera_y, level_height - GAME_HEIGHT))
-            else:
-                camera_y = (level_height - GAME_HEIGHT) // 2
+                if level_height > GAME_HEIGHT:
+                    camera_y = max(0, min(target_camera_y, level_height - GAME_HEIGHT))
+                else:
+                    camera_y = (level_height - GAME_HEIGHT) // 2
         # ★★★ ANIMATING 処理ここまで ★★★
 
         # --- 描画処理 ---
-        game_surface.fill(GAME_BACKGROUND_COLOR)  # ★背景色を (暗い紺色) に変更
+        screen.fill(GAME_BACKGROUND_COLOR) # 全てのステートで背景色で塗りつぶし
+        game_surface.fill(GAME_BACKGROUND_COLOR) # ゲームサーフェスも塗りつぶす
 
         # --- ★ 星空の描画 (Parallax効果) ★ ---
         for x, y, radius, color in stars:
@@ -1807,53 +1909,104 @@ def main():
             screen_y = y - (camera_y * PARALLAX_FACTOR)
 
             # 画面外の星は描画しない (簡易的なカリング)
-            if 0 <= screen_x <= GAME_WIDTH and 0 <= screen_y <= GAME_HEIGHT:
+            if -radius <= screen_x <= GAME_WIDTH + radius and -radius <= screen_y <= GAME_HEIGHT + radius:
                 pygame.draw.circle(
                     game_surface, color, (int(screen_x), int(screen_y)), radius
                 )
         # --- ★ ここまで ★ ---
 
-        # スプライトの描画
-        for sprite in all_sprites:
-            screen_x = sprite.rect.x - camera_x
-            screen_y = sprite.rect.y - camera_y
-            game_surface.blit(sprite.image, (screen_x, screen_y))
 
-        # ★★★ 画面の回転・拡縮ロジックを (回転を復活) ★★★
+        if game_state == "PLAYING" or game_state == "ANIMATING":
+            
+            # スプライトの描画 (ゲームワールドの描画)
+            for sprite in all_sprites:
+                screen_x = sprite.rect.x - camera_x
+                screen_y = sprite.rect.y - camera_y
+                game_surface.blit(sprite.image, (screen_x, screen_y))
 
-        # 1. game_surface を SCREEN サイズに拡大
-        base_display_surface = pygame.transform.scale(
-            game_surface, (SCREEN_WIDTH, SCREEN_HEIGHT)
-        )
-
-        # 2. ウィンドウの余白を埋める
-        screen.fill(WHITE)
-
-        # 3. 拡大したゲーム画面を (current_angle) だけ回転させて描画
-        if current_angle == 0:
-            # 0度の時は transform.rotate を呼ばない (効率化)
-            screen.blit(base_display_surface, (0, 0))
-        else:
-            # current_angle に応じて回転
-            rotated_surface = pygame.transform.rotate(
-                base_display_surface, current_angle
+            # 1. game_surface を SCREEN サイズに拡大
+            base_display_surface = pygame.transform.scale(
+                game_surface, (SCREEN_WIDTH, SCREEN_HEIGHT)
             )
-            rotated_rect = rotated_surface.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-            )
-            screen.blit(rotated_surface, rotated_rect)
 
-        # ★★★ UIの描画 (回転・拡縮の影響を受けないよう、screen に直接描画) ★★★
-        if game_state == "GAME_OVER":
-            screen.blit(dark_overlay, (0, 0))  # 暗転レイヤーを重ねる
+            # 2. 拡大したゲーム画面を (current_angle) だけ回転させて描画
+            if current_angle == 0:
+                screen.blit(base_display_surface, (0, 0))
+            else:
+                rotated_surface = pygame.transform.rotate(
+                    base_display_surface, current_angle
+                )
+                rotated_rect = rotated_surface.get_rect(
+                    center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+                )
+                screen.blit(rotated_surface, rotated_rect)
+            
+            # ★★★ プレイ中のタイム表示 (右上) ★★★
+            time_text = f"Time: {play_time_seconds:.2f} s"
+            text_time = font_time.render(time_text, True, WHITE)
+            text_time_rect = text_time.get_rect(
+                topright=(SCREEN_WIDTH - 10, 10) # 右端から10px、上端から10px
+            )
+            screen.blit(text_time, text_time_rect)
+            
+        # ★★★ TITLE_SCREEN の描画 (新規追加) ★★★
+        elif game_state == "TITLE_SCREEN":
+            screen.blit(text_title_name, text_title_name_rect)
+
+            # START GAME
+            color_start = WHITE if title_menu_selection == 0 else (100, 100, 100)
+            text_start_game_render = font.render("START GAME", True, color_start)
+            screen.blit(text_start_game_render, text_start_game_rect)
+
+            # BEST TIME
+            color_best = WHITE if title_menu_selection == 1 else (100, 100, 100)
+            text_best_time_menu_render = font.render("BEST TIME", True, color_best)
+            screen.blit(text_best_time_menu_render, text_best_time_menu_rect)
+
+        # ★★★ BEST_TIME_SCREEN の描画 (新規追加) ★★★
+        elif game_state == "BEST_TIME_SCREEN":
+            screen.blit(dark_overlay, (0, 0)) # 暗転レイヤー
+            
+            # タイトル
+            text_bt_title = font_title.render("BEST TIME", True, WHITE)
+            text_bt_title_rect = text_bt_title.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 150))
+            screen.blit(text_bt_title, text_bt_title_rect)
+
+            # 記録の表示
+            if best_time_display is not None:
+                bt_text = f"{best_time_display:.2f} s"
+            else:
+                bt_text = "--- NO RECORD ---"
+            
+            text_bt_record = font.render(bt_text, True, KEY_COLOR)
+            text_bt_record_rect = text_bt_record.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            screen.blit(text_bt_record, text_bt_record_rect)
+
+            screen.blit(text_return_to_title, text_return_to_title_rect)
+            
+        # ★★★ GAME_OVER の描画 ★★★
+        elif game_state == "GAME_OVER":
+            screen.blit(dark_overlay, (0, 0))
             screen.blit(text_game_over, text_game_over_rect)
             screen.blit(text_retry, text_retry_rect)
-
+            
+        # ★★★ GAME_CLEAR の描画 ★★★
         elif game_state == "GAME_CLEAR":
-            screen.blit(dark_overlay, (0, 0))  # 暗転レイヤーを重ねる
+            screen.blit(dark_overlay, (0, 0))
             screen.blit(text_game_clear, text_game_clear_rect)
             screen.blit(text_quit, text_quit_rect)
-        # ★★★ 描画ここまで ★★★
+            
+            # ★★★ クリア時の最終タイムを表示 (final_clear_timeを使用) ★★★
+            if final_clear_time is not None:
+                final_time_text = f"Time: {final_clear_time:.2f} s"
+            else:
+                final_time_text = "Time: 0.00 s" # 念のため
+            
+            text_final_time = font_time.render(final_time_text, True, WHITE)
+            text_final_time_rect = text_final_time.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 80)
+            )
+            screen.blit(text_final_time, text_final_time_rect)
 
         pygame.display.flip()
         clock.tick(FPS)
